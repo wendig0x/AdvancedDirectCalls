@@ -43,15 +43,15 @@ SysCall::SysCall()
 {
 	uintptr_t p_syscall = 0;
 
-	// Since Windows 10 TH2  // syscall  // BYTE вместо unsigned char
-	if (*(reinterpret_cast<BYTE*>(stub_addr + 0x12)) == 0x0F &&  // 0f 05 syscall   (+18 байт от начала стаба)
+	// Since Windows 10 TH2
+	if (*(reinterpret_cast<BYTE*>(stub_addr + 0x12)) == 0x0F &&
 		*(reinterpret_cast<BYTE*>(stub_addr + 0x13)) == 0x05)
 	{
-		p_syscall = stub_addr + 0x12;  // адрес инструкции syscall
+		p_syscall = stub_addr + 0x12;
 	}
 
-	// From Windows XP to Windows 10 TH2
-	else if (*(reinterpret_cast<BYTE*>(stub_addr + 0x8)) == 0x0F && // 0f 05 syscall   (+8 байт от начала стаба)
+	// Before Windows 10 TH2
+	else if (*(reinterpret_cast<BYTE*>(stub_addr + 0x8)) == 0x0F &&
 		*(reinterpret_cast<BYTE*>(stub_addr + 0x9)) == 0x05)
 	{
 		p_syscall = stub_addr + 0x8;
