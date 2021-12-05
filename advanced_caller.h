@@ -28,7 +28,7 @@ private:
 	
 public:
 
-    template<typename... Args>
+    	template<typename... Args>
 	int32_t __stdcall call(LPCSTR name_api, Args ... args, ...);
 
 	SysCall();
