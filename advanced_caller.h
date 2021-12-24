@@ -5,7 +5,7 @@
 #include <intrin.h>
 #include <stdarg.h>
 
-extern "C" int32_t __fastcall x_syscall(const uint32_t syscall_num, const uint32_t args_num, uintptr_t syscall_addr, const uint64_t * arg_package);
+extern "C" size_t __fastcall x_syscall(const size_t syscall_idx, const size_t args_count, uintptr_t syscall_addr, const uint64_t * arg_table);
 
 
 class SysCall {
@@ -17,19 +17,16 @@ private:
 
 	unsigned char pBuf[32] { 0 };
 
-	const BYTE prolog_syscall[4] =
-	{
-		0x4C, 0x8B, 0xD1, 0xB8	// mov r10, rcx mov eax, ...
-	};
-
+	const BYTE prolog_syscall[4] { 0x4C, 0x8B, 0xD1, 0xB8 };		// mov r10, rcx, mov eax, ...
+	
 	[[nodiscard]] inline uintptr_t get_syscall_addr(uintptr_t stub_addr) noexcept;
 
-	[[nodiscard]] int32_t get_syscall_index(LPCSTR name_api) noexcept;
+	[[nodiscard]] size_t get_syscall_index(LPCSTR name_api) noexcept;
 	
 public:
 
-    	template<typename... Args>
-	int32_t __stdcall call(LPCSTR name_api, Args ... args, ...);
+    template<typename... Args>
+	size_t __stdcall call(LPCSTR name_api, Args ... args, ...);
 
 	SysCall();
 };
@@ -43,15 +40,15 @@ SysCall::SysCall()
 {
 	uintptr_t p_syscall = 0;
 
-	// Since Windows 10 TH2
-	if (*(reinterpret_cast<BYTE*>(stub_addr + 0x12)) == 0x0F &&
+	// Since Windows 10 TH2  // syscall  // BYTE вместо unsigned char
+	if (*(reinterpret_cast<BYTE*>(stub_addr + 0x12)) == 0x0F &&  // 0f 05 syscall   (+18 байт от начала стаба)
 		*(reinterpret_cast<BYTE*>(stub_addr + 0x13)) == 0x05)
 	{
-		p_syscall = stub_addr + 0x12;
+		p_syscall = stub_addr + 0x12;  // адрес инструкции syscall
 	}
 
-	// Before Windows 10 TH2
-	else if (*(reinterpret_cast<BYTE*>(stub_addr + 0x8)) == 0x0F &&
+	// From Windows XP to Windows 10 TH2
+	else if (*(reinterpret_cast<BYTE*>(stub_addr + 0x8)) == 0x0F && // 0f 05 syscall   (+8 байт от начала стаба)
 		*(reinterpret_cast<BYTE*>(stub_addr + 0x9)) == 0x05)
 	{
 		p_syscall = stub_addr + 0x8;
@@ -60,26 +57,24 @@ SysCall::SysCall()
 	return p_syscall;
 };
 
-[[nodiscard]] int32_t SysCall::get_syscall_index(LPCSTR name_api) noexcept
+[[nodiscard]] size_t SysCall::get_syscall_index(LPCSTR name_api) noexcept
 {
-	if (!dll_base) return 0xFFFFFFFF;
+	if (!dll_base) return static_cast<size_t>(-1);
 
-	uint32_t call_number{ 0 };
+	size_t call_number { 0 };
 
 	const auto pDosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(dll_base);
 	const auto pNtHeader = reinterpret_cast<PIMAGE_NT_HEADERS>((LPBYTE)pDosHeader + pDosHeader->e_lfanew);
 
-	if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE || pNtHeader->Signature != IMAGE_NT_SIGNATURE) return 0xFFFFFFFF;
+	if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE || pNtHeader->Signature != IMAGE_NT_SIGNATURE) return static_cast<size_t>(-1);
 
 	const auto pExportDirectory = reinterpret_cast<PIMAGE_EXPORT_DIRECTORY>((LPBYTE)pDosHeader + pNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 
-	if (pExportDirectory == nullptr) return 0xFFFFFFFF;
-
-	const auto functions_table = reinterpret_cast<DWORD*>((LPBYTE)pDosHeader + pExportDirectory->AddressOfFunctions);
-	const auto names_table = reinterpret_cast<DWORD*>((LPBYTE)pDosHeader + pExportDirectory->AddressOfNames);
+	const auto functions_table = reinterpret_cast<unsigned char*>((LPBYTE)pDosHeader + pExportDirectory->AddressOfFunctions);
+	const auto names_table = reinterpret_cast<unsigned char*>((LPBYTE)pDosHeader + pExportDirectory->AddressOfNames);
 	const auto ordinals_table = reinterpret_cast<WORD*>((LPBYTE)pDosHeader + pExportDirectory->AddressOfNameOrdinals);
 
-	for (DWORD i = 0; i < pExportDirectory->NumberOfFunctions; ++i)
+	for (size_t i = 0; i < pExportDirectory->NumberOfFunctions; ++i)
 	{
 		ordinal = ordinals_table[i];
 		address = dll_base + functions_table[ordinal];
@@ -88,8 +83,6 @@ SysCall::SysCall()
 
 		auto pAddr = reinterpret_cast<VOID*>((LPBYTE)pDosHeader + functions_table[ordinals_table[i]]);
 		auto szName = reinterpret_cast<char*>((LPBYTE)pDosHeader + names_table[i]);
-
-		if (pAddr == nullptr || szName == nullptr) break;
 
 		memcpy(&pBuf, pAddr, 32);
 
@@ -104,7 +97,7 @@ SysCall::SysCall()
 				syscall_addr = get_syscall_addr(address);
 
 				if (!syscall_addr) 
-				return 0xFFFFFFFF;
+				return static_cast<size_t>(-1);
 
 				call_number = pBuf[4];
 				break;
@@ -115,19 +108,19 @@ SysCall::SysCall()
 }
 
 template<typename... Args>
-int32_t __stdcall SysCall::call(LPCSTR name_api, Args ... args, ...)
+size_t __stdcall SysCall::call(LPCSTR name_api, Args ... args, ...)
  {
-	uint64_t arg_table[20]{ 0 };
+	uint64_t arg_table[20] { 0 };
 
-	int syscall_idx = get_syscall_index(name_api);
+	size_t syscall_idx = get_syscall_index(name_api);
 
-	if (syscall_idx == 0xFFFFFFFF) 
-		return 0xFFFFFFFF;
+	if (syscall_idx == static_cast<size_t>(-1))
+		return static_cast<size_t>(-1);
 
 	va_list variadic_arg;
 	va_start(variadic_arg, name_api);
 
-	const auto arg_count = static_cast<uint32_t>(sizeof...(args));
+	const auto arg_count = static_cast<size_t>(sizeof...(args));
 
 	for (auto idx = 0; idx < arg_count; ++idx)
 	{
