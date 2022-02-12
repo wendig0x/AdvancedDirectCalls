@@ -25,8 +25,8 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="syscall_x64.asm">
+    <MASM Include="syscall_x64.asm">
       <Filter>Исходные файлы</Filter>
-    </None>
+    </MASM>
   </ItemGroup>
 </Project>
