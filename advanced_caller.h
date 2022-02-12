@@ -25,10 +25,42 @@ private:
 	
 public:
 
-    template<typename... Args>
-	size_t __stdcall call(LPCSTR name_api, Args ... args, ...);
+	template<typename T>
+	size_t __stdcall call(LPCSTR name_api, const T& arg)
+	{
+		constexpr size_t arguments_count = 1;
+		std::uint64_t arguments_table[1] = {};
+		fill_arguments(arguments_table, arguments_count, arg);
+
+		size_t syscall_idx = get_syscall_index(name_api);
+		return x_syscall(syscall_idx, arguments_count, syscall_addr, arguments_table);
+	}
+
+    template<typename T, typename... Args>
+	size_t __stdcall call(LPCSTR name_api, const T& arg, const Args&... args) 
+	{
+		constexpr size_t arguments_count = sizeof...(args) + 1;
+		std::uint64_t arguments_table[arguments_count] = {};
+		fill_arguments(arguments_table, arguments_count, arg, args...);
+
+		size_t syscall_idx = get_syscall_index(name_api);
+		return x_syscall(syscall_idx, arguments_count, syscall_addr, arguments_table);
+	}
 
 	SysCall();
+
+private:
+	template<typename T, typename... Args>
+	void fill_arguments(std::uint64_t* table, const std::size_t size, const T& arg, const Args&... args) {
+		fill_arguments(table, size, arg);
+		fill_arguments(table, size - 1, args...);
+	}
+	
+	template<typename T>
+	void fill_arguments(std::uint64_t* table, const std::size_t size, const T& arg) {
+		table[size - 1] = reinterpret_cast<std::uint64_t>(&arg);
+	}
+
 };
 
 SysCall::SysCall()
@@ -104,27 +136,4 @@ SysCall::SysCall()
 		}
 	}
 	return call_number;
-}
-
-template<typename... Args>
-size_t __stdcall SysCall::call(LPCSTR name_api, Args ... args, ...)
- {
-	uint64_t arg_table[20] { 0 };
-
-	size_t syscall_idx = get_syscall_index(name_api);
-
-	if (syscall_idx == static_cast<size_t>(-1))
-		return static_cast<size_t>(-1);
-
-	va_list variadic_arg;
-	va_start(variadic_arg, name_api);
-
-	const auto arg_count = static_cast<size_t>(sizeof...(args));
-
-	for (auto idx = 0; idx < arg_count; ++idx)
-		arg_table[idx] = va_arg(variadic_arg, uint64_t);
-
-	va_end(variadic_arg);
-
-	return x_syscall(syscall_idx, arg_count, syscall_addr, arg_table);
 }
