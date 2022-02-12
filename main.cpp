@@ -1,7 +1,7 @@
 ﻿
 #include <Windows.h>
 #include <iostream>
-#include "winternl.h"
+#include <winternl.h>
 #include "advanced_caller.h"
 
 using namespace std;
@@ -54,3 +54,6 @@ int main() {
 		FILE_SYNCHRONOUS_IO_NONALERT,
 		NULL,
 		0);
+
+	return 0;
+}
