@@ -1,7 +1,7 @@
 
-.vs/Project1/v16/.suo
+.vs/*
 
-.vs/Project1/v16/Browse.VC.db
+x64/*
 
 Project1.vcxproj.user
 
