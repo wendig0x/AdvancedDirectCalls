@@ -30,7 +30,7 @@ public:
 	{
 		constexpr size_t arguments_count = 1;
 		std::uint64_t arguments_table[1] = {};
-		fill_arguments(&arguments_table[0], arguments_count, arg);
+		fill_arguments(arguments_table, arguments_count, arg);
 
 		size_t syscall_idx = get_syscall_index(name_api);
 		return x_syscall(syscall_idx, arguments_count, syscall_addr, arguments_table);
@@ -41,7 +41,7 @@ public:
 	{
 		constexpr size_t arguments_count = sizeof...(args) + 1;
 		std::uint64_t arguments_table[arguments_count] = {};
-		fill_arguments(&arguments_table[0], arguments_count, arg, args...);
+		fill_arguments(arguments_table, arguments_count, arg, args...);
 
 		size_t syscall_idx = get_syscall_index(name_api);
 		return x_syscall(syscall_idx, arguments_count, syscall_addr, arguments_table);
